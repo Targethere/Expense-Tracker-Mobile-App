@@ -9,18 +9,22 @@ import 'settings_page.dart';
 import 'home_page.dart';
 
 void main() {
-  runApp(const homepage());
+  runApp(const MyApp());
 }
 
-class homepage extends StatelessWidget {
-  const homepage({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Expense Tracker',
-      theme: ThemeData(useMaterial3: false),
+      theme: ThemeData(
+        useMaterial3: false,
+      ),
+      // ❌ আগে ছিল: home: const MyApp()
+      // ✅ এখন ঠিক করা হলো:
       home: const HomePage(),
     );
   }
@@ -36,23 +40,17 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int currentIndex = 0;
 
-  // PageList of all icons
-  // Ei list index wise kaj kore, 0 index e home screen 2 index e analytics evabe
-  //  Eta Page routing e help kortese
+  // Ei list index wise kaj kore, 0 index e home screen, 1 index e add screen,
+  // 2 index e analytics, evabe. Eta page routing e help kortese.
   final List<Widget> pages = const [
     HomeScreen(),
     AddExpenseScreen(),
     AnalyticsScreen(),
     SearchScreen(),
     SettingsScreen(),
-
-    // Center(child: Text("Home Screen")),
-    // Center(child: Text("Analytics Screen")),
-    // Center(child: Text("Search Screen")),
-    // Center(child: Text("Settings Screen")),
   ];
 
-// This List is use to changing the AppBar title
+  // Ei list ta use hocche AppBar er title change korar jonno
   final List<String> titles = [
     "Expense Tracker",
     "Add Expense",
@@ -60,7 +58,6 @@ class _HomePageState extends State<HomePage> {
     "Search",
     "Settings",
   ];
-
 
   @override
   Widget build(BuildContext context) {
@@ -76,11 +73,11 @@ class _HomePageState extends State<HomePage> {
           statusBarIconBrightness: Brightness.light, // Status bar icons (white)
         ),
       ),
-
       // AppBar Ends Here
 
-      // Body: Demo Text ; further will show full screen
+      // Body: index onujayi page dekhabe
       body: pages[currentIndex],
+      // etar mane holo, index wise routing korbe, dhoro 'currentIndex = 1' hole AddExpenseScreen dekhabe
 
       // Bottom Navigation Bar
       bottomNavigationBar: BottomNavigationBar(
@@ -98,12 +95,18 @@ class _HomePageState extends State<HomePage> {
             icon: Icon(Icons.home_outlined),
             label: "Home",
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.add), label: "Add"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.add),
+            label: "Add",
+          ),
           BottomNavigationBarItem(
             icon: Icon(Icons.analytics_outlined),
             label: "Analytics",
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.search), label: "Search"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.search),
+            label: "Search",
+          ),
           BottomNavigationBarItem(
             icon: Icon(Icons.settings_outlined),
             label: "Settings",
