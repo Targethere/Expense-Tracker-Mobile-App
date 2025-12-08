@@ -20,9 +20,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Expense Tracker',
-      theme: ThemeData(
-        useMaterial3: false,
-      ),
+      theme: ThemeData(useMaterial3: false),
       // ❌ আগে ছিল: home: const MyApp()
       // ✅ এখন ঠিক করা হলো:
       home: const HomePage(),
@@ -65,7 +63,7 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         centerTitle: true,
         title: Text(titles[currentIndex]),
-        backgroundColor: Colors.blue,
+        backgroundColor: const Color.fromARGB(255, 6, 129, 211),
 
         // Status bar style
         systemOverlayStyle: const SystemUiOverlayStyle(
@@ -95,18 +93,12 @@ class _HomePageState extends State<HomePage> {
             icon: Icon(Icons.home_outlined),
             label: "Home",
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.add),
-            label: "Add",
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.add), label: "Add"),
           BottomNavigationBarItem(
             icon: Icon(Icons.analytics_outlined),
             label: "Analytics",
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.search),
-            label: "Search",
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.search), label: "Search"),
           BottomNavigationBarItem(
             icon: Icon(Icons.settings_outlined),
             label: "Settings",

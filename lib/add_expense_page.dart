@@ -136,6 +136,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           const SizedBox(height: 4),
           const Text(
             "Use AI to automatically extract expense details",
+            // "Use AI to automatically extract expense",
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
@@ -191,7 +192,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 minWidth: 0,
                 minHeight: 0,
               ),
-              hintText: "45", // demo value on background
+              hintText: "12", // demo value on background
               filled: true,
               fillColor: Colors.white,
               contentPadding: const EdgeInsets.symmetric(
