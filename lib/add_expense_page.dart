@@ -524,7 +524,12 @@
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart'; // Import for camera/gallery access
+import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+import 'models/expense_model.dart';
+import 'providers/expense_provider.dart';
+import 'providers/auth_provider.dart';
+import 'services/gemini_service.dart';
 
 class AddExpenseScreen extends StatefulWidget {
   const AddExpenseScreen({super.key});
@@ -535,21 +540,20 @@ class AddExpenseScreen extends StatefulWidget {
 
 class _AddExpenseScreenState extends State<AddExpenseScreen> {
   // Controllers
-  final TextEditingController amountController = TextEditingController(
-    text: '45.80',
-  );
-  final TextEditingController descriptionController = TextEditingController(
-    text: 'Whole Foods Market',
-  );
-  final TextEditingController notesController = TextEditingController(
-    text: 'Weekly grocery shopping...',
-  );
+  final TextEditingController amountController = TextEditingController();
+  final TextEditingController descriptionController = TextEditingController();
+  final TextEditingController notesController = TextEditingController();
 
   // State
-  String? selectedCategory = "Food & Dining";
-  String? selectedPaymentMethod = "Card";
-  DateTime selectedDate = DateTime(2025, 1, 30);
-  XFile? scannedImage; // Dynamic: Holds the scanned image file
+  String? selectedCategory;
+  String? selectedPaymentMethod;
+  DateTime selectedDate = DateTime.now();
+  XFile? scannedImage;
+  bool _isSubmitting = false;
+  bool _isScanning = false;
+
+  // Gemini Service
+  final GeminiService _geminiService = GeminiService();
 
   // Data (omitted for brevity, assume they are still here)
   final List<Map<String, dynamic>> categories = [
@@ -597,7 +601,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   // Common card decoration (unchanged)
   BoxDecoration commonCardDecoration() {
     return BoxDecoration(
-      color: Colors.white,
+      color: Theme.of(context).cardColor,
       borderRadius: BorderRadius.circular(16),
       boxShadow: [
         BoxShadow(
@@ -643,33 +647,158 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     }
   }
 
-  void _scanAndExtractDetails(String imagePath) {
-    // Dynamic: This is where the OCR/AI processing logic would go.
-    // In a real app, you'd integrate with:
-    // 1. Firebase ML Kit Text Recognition OR
-    // 2. Google Cloud Vision API (via a backend service)
-    // 3. A custom OCR library
+  Future<void> _scanAndExtractDetails(String imagePath) async {
+    if (!mounted) return;
 
-    // --- Placeholder for Extracted Data ---
-    // Simulate a successful extraction after a delay
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (mounted) {
+    setState(() {
+      _isScanning = true;
+    });
+
+    // Show processing message
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            SizedBox(width: 12),
+            Text('Analyzing receipt with AI...'),
+          ],
+        ),
+        duration: Duration(seconds: 30),
+      ),
+    );
+
+    try {
+      // Call Gemini API to extract expense data
+      final extractedData = await _geminiService.extractExpenseFromReceipt(
+        imagePath,
+      );
+
+      if (!mounted) return;
+
+      // Hide the processing message
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      if (extractedData != null) {
         setState(() {
-          // Dynamic: Apply extracted data to controllers/state
-          amountController.text = '58.99'; // New amount from scan
-          descriptionController.text = 'Starbucks Coffee'; // New description
-          selectedCategory = 'Food & Dining'; // Auto-categorized
-          selectedDate = DateTime.now(); // Date from receipt
-          // notesController.text = 'Scanned successfully from receipt!';
+          _isScanning = false;
+
+          // Populate amount if available
+          if (extractedData['amount'] != null) {
+            amountController.text = extractedData['amount'].toString();
+          }
+
+          // Populate description if available
+          if (extractedData['description'] != null &&
+              extractedData['description'].toString().isNotEmpty) {
+            descriptionController.text = extractedData['description'];
+          }
+
+          // Set category if available and valid
+          if (extractedData['category'] != null) {
+            selectedCategory = extractedData['category'];
+          }
+
+          // Parse and set date if available
+          if (extractedData['date'] != null) {
+            try {
+              selectedDate = DateTime.parse(extractedData['date']);
+            } catch (e) {
+              // Keep current date if parsing fails
+            }
+          }
+
+          // Add merchant name to notes if available
+          if (extractedData['merchantName'] != null &&
+              extractedData['merchantName'].toString().isNotEmpty) {
+            final merchantNote = 'Merchant: ${extractedData['merchantName']}';
+            if (notesController.text.isEmpty) {
+              notesController.text = merchantNote;
+            } else {
+              notesController.text = '${notesController.text}\n$merchantNote';
+            }
+          }
         });
 
+        // Show success message with confidence level
+        final confidence = extractedData['confidence'] ?? 50;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Receipt scanned! Confidence: $confidence%\nPlease verify the details.',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: confidence >= 70
+                ? const Color(0xFF00C48C)
+                : const Color(0xFFFF9800),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      } else {
+        setState(() {
+          _isScanning = false;
+        });
+
+        // Show error message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Receipt details extracted successfully!'),
+            content: Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Could not extract data from receipt. Please enter manually.',
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
-    });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isScanning = false;
+      });
+
+      // Hide the processing message
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(child: Text('Error: ${e.toString()}')),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   // ==================== SCANNING LOGIC END ====================
@@ -729,7 +858,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           const SizedBox(height: 12),
           const Text(
             "Scan Receipt",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.black,
+            ),
           ),
           const SizedBox(height: 4),
           const Text(
@@ -741,12 +874,26 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed:
-                  _pickImageAndScan, // Dynamic: Linked to the new function
-              icon: const Icon(Icons.camera_alt_outlined),
+              onPressed: _isScanning ? null : _pickImageAndScan,
+              icon: _isScanning
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Color(0xFF8A5BFF),
+                        ),
+                      ),
+                    )
+                  : const Icon(Icons.camera_alt_outlined),
               label: Text(
-                scannedImage != null ? "Rescan Receipt" : "Scan Receipt",
-              ), // Dynamic: Change label after scan
+                _isScanning
+                    ? "Scanning..."
+                    : (scannedImage != null
+                          ? "Rescan Receipt"
+                          : "Scan Receipt"),
+              ),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
@@ -793,7 +940,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               ),
               hintText: "0.00",
               filled: true,
-              fillColor: Colors.white,
+              fillColor: Theme.of(context).canvasColor,
               contentPadding: const EdgeInsets.symmetric(
                 vertical: 14,
                 horizontal: 16,
@@ -839,7 +986,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             decoration: InputDecoration(
               hintText: "What did you buy?",
               filled: true,
-              fillColor: const Color(0xFFF9F9F9),
+              fillColor: Theme.of(context).canvasColor,
               contentPadding: const EdgeInsets.symmetric(
                 vertical: 14,
                 horizontal: 16,
@@ -902,7 +1049,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: !isSelected
-                        ? const Color(0xFFF9F9F9)
+                        ? Theme.of(context).canvasColor
                         : Color(cat["color"]).withOpacity(0.12),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
@@ -1093,7 +1240,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             decoration: InputDecoration(
               hintText: "Add any additional notes...",
               filled: true,
-              fillColor: const Color(0xFFF9F9F9),
+              fillColor: Theme.of(context).canvasColor,
               contentPadding: const EdgeInsets.symmetric(
                 vertical: 14,
                 horizontal: 16,
@@ -1125,9 +1272,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
-        onPressed: _saveExpense,
+        onPressed: _isSubmitting ? null : _saveExpense,
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF4A3AFF),
+          disabledBackgroundColor: const Color(0xFF4A3AFF).withOpacity(0.6),
           padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
@@ -1135,31 +1283,201 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           elevation: 3,
           shadowColor: Colors.black.withOpacity(0.15),
         ),
-        child: const Text(
-          "Add Expense",
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
+        child: _isSubmitting
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Text(
+                "Add Expense",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
       ),
     );
   }
 
-  void _saveExpense() {
-    if (amountController.text.isEmpty ||
-        selectedCategory == null ||
-        selectedPaymentMethod == null) {
+  // Validation method
+  String? _validateInputs() {
+    // Validate amount
+    if (amountController.text.trim().isEmpty) {
+      return 'Please enter an amount';
+    }
+
+    final amount = double.tryParse(amountController.text.trim());
+    if (amount == null) {
+      return 'Please enter a valid amount';
+    }
+
+    if (amount <= 0) {
+      return 'Amount must be greater than 0';
+    }
+
+    if (amount > 999999999) {
+      return 'Amount is too large';
+    }
+
+    // Validate category
+    if (selectedCategory == null || selectedCategory!.isEmpty) {
+      return 'Please select a category';
+    }
+
+    // Validate payment method
+    if (selectedPaymentMethod == null || selectedPaymentMethod!.isEmpty) {
+      return 'Please select a payment method';
+    }
+
+    // Validate description (optional but trim)
+    final description = descriptionController.text.trim();
+    if (description.length > 200) {
+      return 'Description is too long (max 200 characters)';
+    }
+
+    // Validate notes (optional but trim)
+    final notes = notesController.text.trim();
+    if (notes.length > 500) {
+      return 'Notes are too long (max 500 characters)';
+    }
+
+    return null; // All validations passed
+  }
+
+  // Save expense method with full validation
+  Future<void> _saveExpense() async {
+    // Prevent multiple submissions
+    if (_isSubmitting) return;
+
+    // Validate inputs
+    final validationError = _validateInputs();
+    if (validationError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all required fields')),
+        SnackBar(
+          content: Text(validationError),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
-    // TODO: Save expense to database
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Expense added successfully!')),
-    );
+
+    // Set submitting state
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      // Parse amount
+      final amount = double.parse(amountController.text.trim());
+
+      // Get description (use category if empty)
+      final description = descriptionController.text.trim().isEmpty
+          ? selectedCategory!
+          : descriptionController.text.trim();
+
+      // Get notes (can be null)
+      final notes = notesController.text.trim().isEmpty
+          ? null
+          : notesController.text.trim();
+
+      // Get current user ID from auth provider
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final userId = authProvider.currentUserId;
+
+      if (userId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('User not logged in')));
+        }
+        return;
+      }
+
+      // Create expense object
+      final expense = Expense(
+        userId: userId,
+        amount: amount,
+        description: description,
+        category: selectedCategory!,
+        paymentMethod: selectedPaymentMethod!,
+        date: selectedDate,
+        notes: notes,
+      );
+
+      // Save to database via provider
+      final expenseProvider = Provider.of<ExpenseProvider>(
+        context,
+        listen: false,
+      );
+      final savedExpense = await expenseProvider.addExpense(expense);
+
+      if (savedExpense != null) {
+        // Show success message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Expense added successfully! ৳${amount.toStringAsFixed(2)}',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFF00C48C),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+
+          // Clear form after successful save
+          _clearForm();
+        }
+      } else {
+        throw Exception('Failed to save expense');
+      }
+    } catch (e) {
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      // Reset submitting state
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  // Clear form after successful submission
+  void _clearForm() {
+    amountController.clear();
+    descriptionController.clear();
+    notesController.clear();
+    setState(() {
+      selectedCategory = null;
+      selectedPaymentMethod = null;
+      selectedDate = DateTime.now();
+      scannedImage = null;
+    });
   }
 }
 

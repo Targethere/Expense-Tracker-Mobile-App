@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 // Screens
 import 'add_expense_page.dart';
@@ -7,8 +8,24 @@ import 'analytics_page.dart';
 import 'search_page.dart';
 import 'settings_page.dart';
 import 'home_page.dart';
+import 'screens/login_screen.dart';
 
-void main() {
+// Providers
+import 'providers/expense_provider.dart';
+import 'providers/auth_provider.dart';
+import 'providers/theme_provider.dart';
+import 'providers/preferences_provider.dart';
+
+// Services
+import 'services/notification_service.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize notification service
+  await NotificationService.instance.initialize();
+  await NotificationService.instance.requestPermissions();
+  
   runApp(const MyApp());
 }
 
@@ -17,13 +34,63 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Expense Tracker',
-      theme: ThemeData(useMaterial3: false),
-      // ❌ আগে ছিল: home: const MyApp()
-      // ✅ এখন ঠিক করা হলো:
-      home: const HomePage(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => AuthProvider()),
+        ChangeNotifierProvider(create: (context) => ExpenseProvider()),
+        ChangeNotifierProvider(create: (context) => ThemeProvider()),
+        ChangeNotifierProvider(create: (context) => PreferencesProvider()),
+      ],
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            title: 'Expense Tracker',
+            theme: themeProvider.lightTheme,
+            darkTheme: themeProvider.darkTheme,
+            themeMode: themeProvider.themeMode,
+            home: const AuthWrapper(),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// Auth Wrapper to check authentication status
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, _) {
+        // Show loading screen while checking auth
+        if (authProvider.isLoading) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        // If authenticated, set user ID in expense provider and show home
+        if (authProvider.isAuthenticated) {
+          // Set user ID in expense provider
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final expenseProvider = Provider.of<ExpenseProvider>(context, listen: false);
+            final preferencesProvider = Provider.of<PreferencesProvider>(context, listen: false);
+            
+            expenseProvider.setUserId(authProvider.currentUserId!);
+            expenseProvider.setProviders(preferencesProvider, authProvider);
+          });
+          
+          return const HomePage();
+        }
+
+        // Not authenticated, show login screen
+        return const LoginScreen();
+      },
     );
   }
 }

@@ -43,3 +43,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Environment variables
+.env
+.env.*
+lib/services/GEMINI_API_KEY.txt
+BUG_FIXES.md
+GEMINI_SETUP.md
+IMPLEMENTATION_GUIDE.md
+RECEIPT_SCANNING_GUIDE.md
+PREFERENCES_FEATURES.md
+LOCAL_AUTH_IMPLEMENTATION.md
